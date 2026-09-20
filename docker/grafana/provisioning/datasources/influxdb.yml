@@ -1,0 +1,10 @@
+# Points Grafana at the InfluxDB database that `k6 run --out influxdb=...` writes to.
+apiVersion: 1
+
+datasources:
+  - name: k6-influxdb
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    database: k6
+    isDefault: true

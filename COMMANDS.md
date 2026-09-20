@@ -1,0 +1,135 @@
+# COMMANDS.md
+
+A running log of every command used while working through [PLAN.md](PLAN.md), module by
+module. Verified on Windows 11 with PowerShell; the `docker`, `k6`, and `curl` commands are
+identical on macOS and Linux.
+
+---
+
+## Module 0 — Environment setup
+
+### Install and verify k6
+
+```powershell
+winget install --id GrafanaLabs.k6 --source winget --accept-package-agreements --accept-source-agreements
+```
+
+```bash
+k6 version          # k6.exe v2.2.0 (commit/00a9a1b7f5, go1.26.5, windows/amd64)
+```
+
+winget writes to the **machine** PATH, which shells already open don't reload. Either open a
+new terminal or call the binary directly:
+
+```powershell
+& 'C:\Program Files\k6\k6.exe' version
+```
+
+Other platforms: `brew install k6` (macOS), or see the
+[k6 install docs](https://grafana.com/docs/k6/latest/set-up/install-k6/).
+
+### Run the target app with Docker
+
+```bash
+docker compose up -d --build target-app   # build + start
+docker compose ps                         # confirm STATUS is "(healthy)"
+docker compose logs -f target-app         # tail logs
+docker compose down                       # stop and remove
+```
+
+The Grafana + InfluxDB stack is behind a profile and stays down unless asked for:
+
+```bash
+docker compose --profile observability up -d
+```
+
+On Windows, Docker Desktop must be running before any of these work:
+
+```powershell
+Start-Process 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
+```
+
+```bash
+until docker info >/dev/null 2>&1; do sleep 3; done   # wait for the engine
+```
+
+### Run the target app without Docker
+
+```bash
+cd target-app
+python -m venv .venv
+.venv/Scripts/activate                  # Windows
+# source .venv/bin/activate             # macOS/Linux
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+### Run the tests
+
+```bash
+k6 run tests/00-setup/verify-install.js   # Module 0 exercise, hits test.k6.io
+k6 run tests/01-smoke/smoke.js            # the local smoke test
+```
+
+Useful variations (no code change needed):
+
+```bash
+k6 run --vus 10 --duration 30s tests/01-smoke/smoke.js   # override load from the CLI
+k6 run -e BASE_URL=http://localhost:8000 tests/01-smoke/smoke.js
+```
+
+### Exercise the target app by hand
+
+```bash
+curl http://localhost:8000/
+curl "http://localhost:8000/products?limit=2"
+curl http://localhost:8000/products/3
+
+TOKEN=$(curl -s -X POST http://localhost:8000/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"user1","password":"k6learning"}' | jq -r .token)
+
+curl http://localhost:8000/me -H "Authorization: Bearer $TOKEN"
+curl -X POST http://localhost:8000/cart -H "Authorization: Bearer $TOKEN"
+```
+
+PowerShell has no `curl`; it aliases to `Invoke-WebRequest`, which takes different arguments:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/
+$login = Invoke-RestMethod -Method POST -Uri http://localhost:8000/login `
+  -Body '{"username":"user1","password":"k6learning"}' -ContentType 'application/json'
+$auth = @{ Authorization = "Bearer $($login.token)" }
+Invoke-RestMethod http://localhost:8000/me -Headers $auth
+```
+
+### Control the target app's behaviour
+
+```bash
+# back to seeded state (20 products, 10 users, no carts or orders)
+curl -X POST http://localhost:8000/admin/reset
+
+# current tunables plus live and peak in-flight counts
+curl http://localhost:8000/admin/config
+
+# make it slow without restarting — this is the Module 14 regression demo
+curl -X POST http://localhost:8000/admin/config \
+  -H 'Content-Type: application/json' \
+  -d '{"base_latency_ms": 800}'
+
+# the deliberately unreliable endpoint
+curl "http://localhost:8000/unstable?delay_ms=2000&error_rate=0"   # slow, always 200
+curl "http://localhost:8000/unstable?delay_ms=0&error_rate=1"      # instant, always 500
+```
+
+### Measurements taken during setup
+
+Used to confirm the capacity model actually produces a degradation curve:
+
+| Load on `GET /products` | p95 `http_req_duration` |
+|-------------------------|-------------------------|
+| 1 VU, 5s | ~61 ms |
+| 90 VUs, 10s | ~355 ms |
+
+Peak in-flight reached 90 with zero failed requests — below the `MAX_INFLIGHT=250` ceiling
+where the app starts returning `503`.

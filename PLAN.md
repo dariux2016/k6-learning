@@ -44,7 +44,10 @@ and no risk of hammering a real service.
 
 ---
 
-## Module 0 — Environment setup
+## Module 0 — Environment setup ✅
+
+> **Done.** k6 v2.2.0 installed, `target-app/` built, `docker-compose.yml` and the first
+> smoke test in place. Walkthrough: [tests/00-setup/README.md](tests/00-setup/README.md).
 
 **Goal:** get k6 installed and a target app running so every later module has something to test against.
 

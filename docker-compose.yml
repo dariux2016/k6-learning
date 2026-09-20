@@ -1,0 +1,58 @@
+# One command to get a load-testing target running:
+#
+#   docker compose up -d target-app
+#
+# The Grafana + InfluxDB stack used for result trending (Module 14) is parked
+# behind a profile so it does not start unless you ask for it:
+#
+#   docker compose --profile observability up -d
+
+services:
+  target-app:
+    build: ./target-app
+    container_name: k6-target-app
+    ports:
+      - "8000:8000"
+    environment:
+      # Everything the app does can be retuned from here. See target-app/README.md.
+      BASE_LATENCY_MS: "20"
+      BASE_LATENCY_JITTER_MS: "30"
+      LOGIN_LATENCY_MS: "120"
+      CAPACITY: "50"
+      DEGRADE_MS_PER_EXCESS: "4"
+      MAX_INFLIGHT: "250"
+      UNSTABLE_DELAY_MS: "500"
+      UNSTABLE_ERROR_RATE: "0.25"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  influxdb:
+    image: influxdb:1.8
+    container_name: k6-influxdb
+    profiles: ["observability"]
+    ports:
+      - "8086:8086"
+    environment:
+      INFLUXDB_DB: k6
+      INFLUXDB_HTTP_MAX_BODY_SIZE: "0"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: k6-grafana
+    profiles: ["observability"]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_BASIC_ENABLED: "false"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - influxdb
+    restart: unless-stopped

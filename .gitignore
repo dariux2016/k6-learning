@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# k6 output artifacts
+*.json.gz
+results/
+summary.json
+summary.html
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
