@@ -133,3 +133,76 @@ Used to confirm the capacity model actually produces a degradation curve:
 
 Peak in-flight reached 90 with zero failed requests — below the `MAX_INFLIGHT=250` ceiling
 where the app starts returning `503`.
+
+---
+
+## Module 1 — Anatomy of a k6 test
+
+### Run the scripts
+
+```bash
+k6 run tests/01-smoke/smoke.js              # the test itself
+k6 run tests/01-smoke/lifecycle.js          # init-vs-iteration demo
+k6 run tests/01-smoke/exercise-public-api.js
+```
+
+### CLI overrides
+
+Anything in `options` can be overridden by a flag, so one script serves as both a smoke test
+and a load test. Precedence: CLI flag > `options` in the script > k6 default.
+
+```bash
+k6 run --vus 5 --duration 10s tests/01-smoke/smoke.js     # duration-based
+k6 run --vus 10 --iterations 200 tests/01-smoke/smoke.js  # iteration-based
+k6 run -e BASE_URL=http://localhost:8000 tests/01-smoke/smoke.js
+k6 run -e API_URL=https://your-api.example.com/health tests/01-smoke/exercise-public-api.js
+```
+
+| Flag | Short | Effect |
+|------|-------|--------|
+| `--vus` | `-u` | Number of virtual users. |
+| `--duration` | `-d` | Run for a wall-clock time. |
+| `--iterations` | `-i` | Total iterations shared among all VUs. |
+| `--quiet` | `-q` | Hide the live progress bar. |
+| `-e KEY=value` | | Set a `__ENV` variable. |
+
+### Summary output
+
+```bash
+k6 run --summary-mode full tests/01-smoke/smoke.js    # adds the sub-timings
+k6 run --summary-mode compact tests/01-smoke/smoke.js # the default
+k6 run --summary-export summary.json tests/01-smoke/smoke.js
+k6 run --summary-trend-stats "min,avg,med,p(95),p(99),max" tests/01-smoke/smoke.js
+```
+
+`--summary-mode full` is what breaks `http_req_duration` into its parts:
+
+```
+http_req_duration = http_req_sending + http_req_waiting + http_req_receiving
+```
+
+`http_req_blocked` and `http_req_connecting` sit outside that sum — they are connection
+acquisition, not server time.
+
+### Shell note
+
+`console.log()` in a k6 script is written to **stderr**, not stdout. Filtering for it needs
+stderr merged in:
+
+```bash
+k6 run tests/01-smoke/lifecycle.js 2>&1 | grep '\[init\]'
+```
+
+In PowerShell, avoid `2>&1` on a native binary — it wraps each stderr line in an ErrorRecord
+and reports a spurious `NativeCommandError`. Use the Bash shell for that filtering, or drop
+the redirect and read the full output.
+
+### Observations recorded while writing the module
+
+Measured against the Module 0 target app, all reproducible:
+
+| Command | Result |
+|---------|--------|
+| `k6 run tests/01-smoke/lifecycle.js` (2 VUs, 6 iters) | 4 `[init]` lines, `__VU` = `0,1,2,0`; VU init order varies run to run; iterations split 3/3 |
+| `k6 run --vus 5 --duration 10s tests/01-smoke/smoke.js` | 9132 iterations, ~913 req/s, p95 8.7ms — no `sleep()`, so VUs loop flat out |
+| `k6 run --vus 5 --duration 5s --summary-mode full` | avg 5.19ms = sending 0.017 + waiting 4.64 + receiving 0.526 |

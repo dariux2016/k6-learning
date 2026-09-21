@@ -4,7 +4,7 @@ A hands-on, progressive project for learning [k6](https://k6.io) performance tes
 single-request smoke test to a multi-scenario suite running in CI.
 
 The curriculum lives in [PLAN.md](PLAN.md). Each module builds on the last.
-**Module 0 (environment setup) is done** — everything below works right now.
+**Modules 0-1 are done** — everything below works right now.
 
 ## Quick start
 
@@ -56,7 +56,7 @@ k6-learning/
 ├── target-app/           # the disposable API we load-test (FastAPI)
 ├── tests/
 │   ├── 00-setup/         # Module 0 — verify the install
-│   └── 01-smoke/         # Module 1 — your first script
+│   └── 01-smoke/         # Module 1 — anatomy of a test, lifecycle, summary output
 ├── docker/               # Grafana provisioning (used from Module 14)
 └── docker-compose.yml    # target app, plus an opt-in Grafana/InfluxDB stack
 ```

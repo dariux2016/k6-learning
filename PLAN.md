@@ -67,7 +67,9 @@ confirm the binary works before touching the local app.
 
 ---
 
-## Module 1 — Your first script: anatomy of a k6 test
+## Module 1 — Your first script: anatomy of a k6 test ✅
+
+> **Done.** Walkthrough: [tests/01-smoke/README.md](tests/01-smoke/README.md).
 
 **Goal:** understand `default function`, VUs, and iterations.
 
