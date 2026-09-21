@@ -84,7 +84,9 @@ confirm the binary works before touching the local app.
 
 ---
 
-## Module 2 — HTTP basics
+## Module 2 — HTTP basics ✅
+
+> **Done.** Walkthrough: [tests/02-http-basics/README.md](tests/02-http-basics/README.md).
 
 **Goal:** cover the full HTTP toolkit: verbs, headers, payloads, responses.
 

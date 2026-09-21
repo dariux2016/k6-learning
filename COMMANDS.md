@@ -206,3 +206,77 @@ Measured against the Module 0 target app, all reproducible:
 | `k6 run tests/01-smoke/lifecycle.js` (2 VUs, 6 iters) | 4 `[init]` lines, `__VU` = `0,1,2,0`; VU init order varies run to run; iterations split 3/3 |
 | `k6 run --vus 5 --duration 10s tests/01-smoke/smoke.js` | 9132 iterations, ~913 req/s, p95 8.7ms — no `sleep()`, so VUs loop flat out |
 | `k6 run --vus 5 --duration 5s --summary-mode full` | avg 5.19ms = sending 0.017 + waiting 4.64 + receiving 0.526 |
+
+---
+
+## Module 2 — HTTP basics
+
+### Run the scripts
+
+```bash
+k6 run tests/02-http-basics/http-basics.js
+k6 run tests/02-http-basics/exercise-browse-products.js
+```
+
+`http-basics.js` deletes a product every run (its `DELETE` demo), which shifts which product ID
+is "first" on the next run. Reset between runs to keep IDs predictable:
+
+```bash
+curl -X POST http://localhost:8000/admin/reset
+k6 run tests/02-http-basics/http-basics.js
+```
+
+### Observations recorded while writing the module
+
+Measured against the Module 0 target app (freshly reset), all reproducible:
+
+```
+GET /products         -> 200, 20 total in store
+GET /products/1      -> 200 "Nimbus Headphones"
+POST /login            -> 200, token=eyJhbGciOiJI...
+GET /me                -> 200 role=admin
+POST /cart              -> 201, cart id=1
+POST /cart/1/items -> 200
+PUT /products/1      -> 200, stock=999
+DELETE /products/1   -> 204, body="null"
+```
+
+```
+http_req_duration..............: avg=51.31ms min=28.87ms med=40.53ms max=145.01ms
+http_req_failed................: 0.00%  0 out of 8
+http_reqs......................: 8      2.342178/s
+iteration_duration.............: avg=3.41s   (three sleep(1) calls dominate)
+```
+
+### The missing-Content-Type mistake, demonstrated
+
+`JSON.stringify()`-ing a body without setting `Content-Type: application/json` sends valid JSON
+bytes that the server has no instruction to parse as JSON — FastAPI returns `422`, not a
+connection error or a `401`:
+
+```js
+const res = http.post(
+  'http://localhost:8000/login',
+  JSON.stringify({ username: 'user1', password: 'k6learning' }),
+);
+// status=422 body={"detail":[{"type":"model_attributes_type","loc":["body"],
+//   "msg":"Input should be a valid dictionary or object to extract fields from", ...}]}
+```
+
+### Verifying the target app without Docker (this session)
+
+Docker's daemon wasn't reachable in this sandbox, so the target app was run directly for
+verification, and k6 was built from source since no package manager mirror for the official
+binary was reachable either:
+
+```bash
+python3 -m venv /tmp/venv-target-app
+/tmp/venv-target-app/bin/pip install -r target-app/requirements.txt
+/tmp/venv-target-app/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000   # from target-app/
+
+go install go.k6.io/k6@latest   # go.k6.io mirrors dl.k6.io's release process
+$(go env GOPATH)/bin/k6 run tests/02-http-basics/http-basics.js
+```
+
+Normal setups just use `docker compose up -d target-app` and an installed `k6` binary per
+Module 0 — this detour was specific to this sandboxed environment.
