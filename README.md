@@ -4,7 +4,7 @@ A hands-on, progressive project for learning [k6](https://k6.io) performance tes
 single-request smoke test to a multi-scenario suite running in CI.
 
 The curriculum lives in [PLAN.md](PLAN.md). Each module builds on the last.
-**Modules 0-2 are done** — everything below works right now.
+**Modules 0-3 are done** — everything below works right now.
 
 ## Quick start
 
@@ -20,6 +20,10 @@ k6 run tests/01-smoke/smoke.js
 
 # 4. run the HTTP basics walkthrough (GET/POST/PUT/DELETE, headers, sleep)
 k6 run tests/02-http-basics/http-basics.js
+
+# 5. run a test that actually passes or fails, and read its exit code
+k6 run tests/03-checks-thresholds/thresholds.js
+echo $?    # 0 = every threshold held, 99 = one was crossed
 ```
 
 That's it. Every test in this repo runs offline against your own machine — no external
@@ -60,7 +64,8 @@ k6-learning/
 ├── tests/
 │   ├── 00-setup/         # Module 0 — verify the install
 │   ├── 01-smoke/         # Module 1 — anatomy of a test, lifecycle, summary output
-│   └── 02-http-basics/   # Module 2 — verbs, headers, payloads, responses, sleep
+│   ├── 02-http-basics/   # Module 2 — verbs, headers, payloads, responses, sleep
+│   └── 03-checks-thresholds/  # Module 3 — assertions, SLO gating, exit codes
 ├── docker/               # Grafana provisioning (used from Module 14)
 └── docker-compose.yml    # target app, plus an opt-in Grafana/InfluxDB stack
 ```
@@ -90,6 +95,10 @@ k6 run -e BASE_URL=http://localhost:8000 tests/01-smoke/smoke.js
 
 # reset the target app to its seeded state between runs
 curl -X POST http://localhost:8000/admin/reset
+
+# make the app slow on demand, to watch a threshold fail (set it back to 20 to undo)
+curl -X POST http://localhost:8000/admin/config \
+  -H 'Content-Type: application/json' -d '{"base_latency_ms": 800}'
 
 # tail the app's logs
 docker compose logs -f target-app

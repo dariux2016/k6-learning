@@ -280,3 +280,133 @@ $(go env GOPATH)/bin/k6 run tests/02-http-basics/http-basics.js
 
 Normal setups just use `docker compose up -d target-app` and an installed `k6` binary per
 Module 0 — this detour was specific to this sandboxed environment.
+
+---
+
+## Module 3 — Checks and thresholds
+
+### Run the scripts
+
+```bash
+k6 run tests/03-checks-thresholds/checks.js                       # exit 0, despite 2 failed checks
+k6 run tests/03-checks-thresholds/thresholds.js                   # exit 0, all thresholds hold (~15s)
+k6 run tests/03-checks-thresholds/exercise-failing-thresholds.js  # exit 99, by design
+```
+
+### Read the exit code
+
+This is the module's whole point, and it is the part that scrolls off screen if you don't ask
+for it explicitly:
+
+```bash
+k6 run tests/03-checks-thresholds/thresholds.js
+echo $?            # bash
+```
+
+```powershell
+k6 run tests/03-checks-thresholds/thresholds.js
+$LASTEXITCODE      # PowerShell
+```
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Every threshold held. Checks may still have failed. |
+| `99` | At least one threshold was crossed. |
+| `104`, `107`, … | Script or init error — the test never really ran. |
+
+### Override the exercise's endpoint behaviour from the CLI
+
+```bash
+k6 run -e DELAY_MS=50 -e ERROR_RATE=0 tests/03-checks-thresholds/exercise-failing-thresholds.js
+k6 run -e ERROR_RATE=0.9 tests/03-checks-thresholds/exercise-failing-thresholds.js   # for the abortOnFail TODO
+```
+
+### Cause a regression on purpose, then undo it
+
+The target app retunes at runtime, so a threshold can be broken without editing anything:
+
+```bash
+curl -X POST http://localhost:8000/admin/config \
+  -H 'Content-Type: application/json' -d '{"base_latency_ms": 800}'
+
+k6 run tests/03-checks-thresholds/thresholds.js    # now exits 99
+
+curl -X POST http://localhost:8000/admin/config \
+  -H 'Content-Type: application/json' -d '{"base_latency_ms": 20}'
+```
+
+### Observations recorded while writing the module
+
+`checks.js` — two deliberately failing checks plus one genuine `500`:
+
+```
+checks_succeeded...: 85.71% 12 out of 14
+http_req_failed....: 20.00% 1 out of 5
+exit code: 0
+```
+
+Checks alone can never fail a run.
+
+`thresholds.js` against a healthy app — exit 0:
+
+```
+✓ 'p(95)<500' p(95)=150.34ms          ✓ {name:list_products} 'p(95)<400' p(95)=52.53ms
+✓ 'avg<300' avg=73.13ms               ✓ {name:login} 'p(95)<900' p(95)=152.6ms
+✓ checks 'rate>0.99' rate=100.00%     ✓ {check_type:critical} 'rate==1' rate=100.00%
+✓ http_req_failed 'rate<0.01' 0.00%   ✓ http_reqs 'count>100' count=105
+```
+
+The same script with `base_latency_ms: 800` — exit 99:
+
+```
+✗ 'p(95)<500' p(95)=830.05ms          ✗ {name:list_products} 'p(95)<400' p(95)=831.39ms
+✗ 'avg<300' avg=592.56ms              ✓ {name:login} 'p(95)<900' p(95)=149.05ms
+✗ http_reqs 'count>100' count=60      ✓ checks 'rate>0.99' rate=100.00%
+```
+
+Three things worth keeping from that run:
+
+- **Checks stayed at 100%** while the app got 40× slower — every response was still a correct
+  `200`. Checks measure correctness, thresholds measure speed.
+- **`{name:login}` held at 149ms** because this app's login path has its own latency setting.
+  Per-endpoint sub-metrics localise a regression; a global `p(95)` only says "something".
+- **`http_reqs` fell from 105 to 60** in the same 15s, because each VU spends longer waiting.
+  A `count>` threshold is a cheap canary for "this run did far less work than usual".
+
+`exercise-failing-thresholds.js` as shipped — exit 99:
+
+```
+✗ checks 'rate>0.99' rate=88.09%
+✗ http_req_duration 'p(95)<100' p(95)=507.99ms
+✗ http_req_failed 'rate<0.01' rate=11.90%
+level=error msg="thresholds on metrics 'checks, http_req_duration, http_req_failed' have been crossed"
+```
+
+Values that make it pass against `/unstable`'s real behaviour (500ms delay, 0.25 error rate):
+`p(95)<700`, `rate<0.20`, `rate>0.80` — measured at 507ms / 14.28% / 85.71%.
+
+### The abortOnFail scoping catch
+
+`abortOnFail` on an **unscoped** `http_req_failed` does not fire in that exercise even at
+`-e ERROR_RATE=0.9`, because half the script's requests go to the healthy `/` endpoint:
+
+```
+http_req_failed: [{ threshold: 'rate<0.5', abortOnFail: true, delayAbortEval: '3s' }]
+-> rate=47.61%, threshold never crossed, ran the full 10s
+```
+
+Scoped to the tagged sub-metric it fires immediately:
+
+```
+'http_req_failed{name:unstable}': [{ threshold: 'rate<0.5', abortOnFail: true, delayAbortEval: '3s' }]
+-> rate=100.00%, run aborted after ~4.3s instead of 10s
+```
+
+### Windows note
+
+k6 installs to `C:\Program Files\k6\k6.exe`. If `k6` isn't on PATH in the shell you're in
+(winget writes to the machine PATH, which open shells don't reload), call it directly:
+
+```bash
+'/c/Program Files/k6/k6.exe' run tests/03-checks-thresholds/thresholds.js
+```

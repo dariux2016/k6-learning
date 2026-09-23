@@ -102,7 +102,9 @@ confirm the binary works before touching the local app.
 
 ---
 
-## Module 3 — Checks and thresholds
+## Module 3 — Checks and thresholds ✅
+
+> **Done.** Walkthrough: [tests/03-checks-thresholds/README.md](tests/03-checks-thresholds/README.md).
 
 **Goal:** move from "did it run" to "did it pass."
 

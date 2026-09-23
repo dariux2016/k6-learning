@@ -300,4 +300,4 @@ That last one is Module 2's opening move.
 
 ---
 
-**Next:** Module 2 — HTTP basics · [Module 0](../00-setup/) · [PLAN.md](../../PLAN.md)
+**Next:** [Module 2 — HTTP basics](../02-http-basics/) · [Module 0](../00-setup/) · [PLAN.md](../../PLAN.md)

@@ -227,4 +227,4 @@ You should be able to answer these without scrolling up:
 
 ---
 
-**Next:** Module 3 — Checks and thresholds · [Module 1](../01-smoke/) · [PLAN.md](../../PLAN.md)
+**Next:** [Module 3 — Checks and thresholds](../03-checks-thresholds/) · [Module 1](../01-smoke/) · [PLAN.md](../../PLAN.md)
